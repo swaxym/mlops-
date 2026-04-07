@@ -1,0 +1,50 @@
+name: MLOps CI Pipeline
+
+on: [push]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Setup Python and Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3 python3-pip
+          ln -sf /usr/bin/python3 /usr/bin/python || true
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Setup Node.js and Install CML
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt install -y nodejs
+          npm install -g @dvcorg/cml
+
+      - name: Train and Evaluate Model
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python model1.py
+          echo "## Model Metrics" > report.md
+          cat metrics.txt >> report.md
+          echo "" >> report.md
+          echo "## Model Performance" >> report.md
+          cml-publish model_results.png --md >> report.md
+          cml-send-comment report.md
+
+      - name: Start Flask API
+        run: |
+          echo "Starting Flask API..."
+          nohup python app.py > flask.log 2>&1 &
+          sleep 5
+
+      - name: Test API Endpoint
+        run: |
+          echo "Testing API..."
+          curl -X POST http://127.0.0.1:5000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"input":[5]}'
